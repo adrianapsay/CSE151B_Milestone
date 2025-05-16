@@ -1,0 +1,32 @@
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# PyTorch Lightning
+lightning_logs/
+
+# Project-specific outputs
+submissions/
+val_preds.npy
+val_trues.npy
+
+# Python
+__pycache__/
+*.py[cod]
+*.env
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Log files
+*.log
