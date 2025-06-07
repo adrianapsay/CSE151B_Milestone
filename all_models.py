@@ -435,3 +435,243 @@ class UNetCNN(nn.Module):
         out_pr = self.final_pr(d1_pr)
     
         return torch.cat([out_tas, out_pr], dim=1)  # shape: [B, 2, H, W]
+
+### SE UNet
+import torch
+import torch.nn as nn
+
+class CoordConv(nn.Module):
+    def forward(self, x):
+        B, C, H, W = x.shape
+        yy = torch.linspace(-1, 1, H, device=x.device).view(1,1,H,1).expand(B,1,H,W)
+        xx = torch.linspace(-1, 1, W, device=x.device).view(1,1,1,W).expand(B,1,H,W)
+        return torch.cat([x, xx, yy], dim=1)
+
+class SEBlock(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super().__init__()
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)
+
+class UNetBlock(nn.Module):
+    def __init__(self, in_ch, out_ch, k=3):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, k, padding=k//2),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_ch, out_ch, k, padding=k//2),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        )
+        self.se = SEBlock(out_ch)
+
+    def forward(self, x):
+        return self.se(self.block(x))
+
+class UNetCNN_SE(nn.Module):
+    def __init__(self, n_input_channels, n_output_channels, init_dim=64, dropout_rate=0.2):
+        super().__init__()
+        self.coord  = CoordConv()
+        self.enc1   = UNetBlock(n_input_channels + 2, init_dim)
+        self.pool1  = nn.MaxPool2d(2)
+        self.enc2   = UNetBlock(init_dim, init_dim*2)
+        self.pool2  = nn.MaxPool2d(2)
+        self.bottleneck = UNetBlock(init_dim*2, init_dim*4)
+        self.up2    = nn.ConvTranspose2d(init_dim*4, init_dim*2, 2, stride=2)
+        self.dec2   = UNetBlock(init_dim*4, init_dim*2)
+        self.up1    = nn.ConvTranspose2d(init_dim*2, init_dim,   2, stride=2)
+        self.dec1   = UNetBlock(init_dim*2, init_dim)
+        self.dropout = nn.Dropout2d(dropout_rate)
+        self.final   = nn.Conv2d(init_dim, n_output_channels, kernel_size=1)
+
+    def forward(self, x):
+        x  = self.coord(x)
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.pool1(e1))
+        b  = self.bottleneck(self.pool2(e2))
+        d2 = self.dec2(torch.cat([self.up2(b), e2], dim=1))
+        d1 = self.dec1(torch.cat([self.up1(d2), e1], dim=1))
+        out = self.dropout(d1)
+        return self.final(out)
+
+## ImprovedUNet
+import torch
+import torch.nn as nn
+
+class CoordConv(nn.Module):
+    def forward(self, x):
+        B, C, H, W = x.shape
+        yy = torch.linspace(-1, 1, H, device=x.device).view(1, 1, H, 1).expand(B, 1, H, W)
+        xx = torch.linspace(-1, 1, W, device=x.device).view(1, 1, 1, W).expand(B, 1, H, W)
+        return torch.cat([x, xx, yy], dim=1)
+
+class SEBlock(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super().__init__()
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)
+
+class AttentionGate(nn.Module):
+    def __init__(self, F_g, F_l, F_int):
+        super().__init__()
+        self.W_g = nn.Sequential(nn.Conv2d(F_g, F_int, 1), nn.BatchNorm2d(F_int))
+        self.W_x = nn.Sequential(nn.Conv2d(F_l, F_int, 1), nn.BatchNorm2d(F_int))
+        self.psi = nn.Sequential(nn.Conv2d(F_int, 1, 1), nn.BatchNorm2d(1), nn.Sigmoid())
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x_l, x_g):
+        g1 = self.W_g(x_g)
+        x1 = self.W_x(x_l)
+        psi = self.relu(g1 + x1)
+        attn = self.psi(psi)
+        return x_l * attn
+
+class UNetBlock(nn.Module):
+    def __init__(self, in_ch, out_ch, k=3):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, k, padding=k // 2),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_ch, out_ch, k, padding=k // 2),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        )
+        self.se = SEBlock(out_ch)
+
+    def forward(self, x):
+        out = self.se(self.block(x))
+        if out.shape == x.shape:
+            return out + x
+        return out
+
+class UNetImproved(nn.Module):
+    def __init__(self, n_input_channels, n_output_channels=2, init_dim=64, dropout_rate=0.2):  
+        super().__init__()
+        self.coord = CoordConv()
+        self.enc1 = UNetBlock(n_input_channels + 2, init_dim)
+        self.pool1 = nn.MaxPool2d(2)
+        self.enc2 = UNetBlock(init_dim, init_dim * 2)
+        self.pool2 = nn.MaxPool2d(2)
+        self.bottleneck = UNetBlock(init_dim * 2, init_dim * 4)
+
+        self.up2 = nn.ConvTranspose2d(init_dim * 4, init_dim * 2, 2, stride=2)
+        self.att2 = AttentionGate(F_g=init_dim * 2, F_l=init_dim * 2, F_int=init_dim)
+        self.dec2 = UNetBlock(init_dim * 4, init_dim * 2)
+
+        self.up1 = nn.ConvTranspose2d(init_dim * 2, init_dim, 2, stride=2)
+        self.att1 = AttentionGate(F_g=init_dim, F_l=init_dim, F_int=init_dim // 2)
+        self.dec1 = UNetBlock(init_dim * 2, init_dim)
+
+        self.dropout = nn.Dropout2d(dropout_rate)
+        self.out_tas = nn.Conv2d(init_dim, 1, kernel_size=1)
+        self.out_pr = nn.Sequential(nn.Conv2d(init_dim, 1, kernel_size=1), nn.ReLU())
+
+    def forward(self, x):
+        x = self.coord(x)
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.pool1(e1))
+        b = self.bottleneck(self.pool2(e2))
+
+        u2 = self.up2(b)
+        a2 = self.att2(e2, u2)
+        d2 = self.dec2(torch.cat([u2, a2], dim=1))
+
+        u1 = self.up1(d2)
+        a1 = self.att1(e1, u1)
+        d1 = self.dec1(torch.cat([u1, a1], dim=1))
+
+        out = self.dropout(d1)
+        tas = self.out_tas(out)
+        pr = self.out_pr(out)
+        return torch.cat([tas, pr], dim=1)
+
+## UNet Deepened
+import torch
+import torch.nn as nn
+
+class CoordConv(nn.Module):
+    def forward(self, x):
+        B, C, H, W = x.shape
+        yy = torch.linspace(-1, 1, H, device=x.device).view(1, 1, H, 1).expand(B, 1, H, W)
+        xx = torch.linspace(-1, 1, W, device=x.device).view(1, 1, 1, W).expand(B, 1, H, W)
+        return torch.cat([x, xx, yy], dim=1)
+
+class UNetBlock(nn.Module):
+    def __init__(self, in_ch, out_ch, k=3):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, k, padding=k // 2),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_ch, out_ch, k, padding=k // 2),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        return self.block(x)
+
+class UNetCNN_Deepened(nn.Module):
+    def __init__(self, n_input_channels, n_output_channels, init_dim=64, dropout_rate=0.3):
+        super().__init__()
+        self.coord = CoordConv()
+
+        # Encoder
+        self.enc1 = UNetBlock(n_input_channels + 2, init_dim)
+        self.pool1 = nn.MaxPool2d(2)
+        self.enc2 = UNetBlock(init_dim, init_dim * 2)
+        self.pool2 = nn.MaxPool2d(2)
+        self.enc3 = UNetBlock(init_dim * 2, init_dim * 4)
+        self.pool3 = nn.MaxPool2d(2)
+
+        # Bottleneck
+        self.bottleneck = UNetBlock(init_dim * 4, init_dim * 8)
+
+        # Decoder
+        self.up3 = nn.ConvTranspose2d(init_dim * 8, init_dim * 4, 2, stride=2)
+        self.dec3 = UNetBlock(init_dim * 8, init_dim * 4)
+        self.up2 = nn.ConvTranspose2d(init_dim * 4, init_dim * 2, 2, stride=2)
+        self.dec2 = UNetBlock(init_dim * 4, init_dim * 2)
+        self.up1 = nn.ConvTranspose2d(init_dim * 2, init_dim, 2, stride=2)
+        self.dec1 = UNetBlock(init_dim * 2, init_dim)
+
+        self.dropout = nn.Dropout2d(dropout_rate)
+        self.final = nn.Conv2d(init_dim, n_output_channels, kernel_size=1)
+
+    def forward(self, x):
+        x = self.coord(x)
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.pool1(e1))
+        e3 = self.enc3(self.pool2(e2))
+        b  = self.bottleneck(self.pool3(e3))
+
+        d3 = self.dec3(torch.cat([self.up3(b), e3], dim=1))
+        d2 = self.dec2(torch.cat([self.up2(d3), e2], dim=1))
+        d1 = self.dec1(torch.cat([self.up1(d2), e1], dim=1))
+
+        out = self.dropout(d1)
+        return self.final(out)
