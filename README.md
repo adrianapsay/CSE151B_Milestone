@@ -4,12 +4,13 @@ This repository contains the code and models developed for our final project in 
 
 ## Project Structure
 
-- `models/` – Contains model architecture implementations, including U-Net variants
-- `train.py` – Training script using PyTorch Lightning and Hydra
-- `configs/` – Configuration files for training, logging, and model setup
-- `data/` – (ignored in repo) Zarr-formatted CMIP6 dataset inputs
-- `notebooks/` – Jupyter notebooks for exploratory analysis and result visualization
-- `utils/` – Helper functions for metrics, preprocessing, and plotting
+- `notebooks/` – Jupyter notebooks for experimentation and exploratory analysis  
+- `models/` – Contains all model architecture implementations  
+  - `all_models.py` – Unified script with all model variants (U-Net, SE, CoordConv, etc.) and documentation  
+- `figures/` – Visualizations and plots used in reports and presentations  
+- `core/` – Scripts for data preprocessing, descriptive statistics, and helpers  
+- `README.md` – Project overview and usage instructions  
+- `.gitignore` – File exclusion rules for checkpoints, metadata, and cache
 
 ## Goal
 
