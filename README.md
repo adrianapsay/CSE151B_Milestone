@@ -36,7 +36,7 @@ This architecture uses:
 
 ## Results
 
-Our best-performing model on the **Kaggle private test set** was:
+Our best-performing model on the **Kaggle private test set** garnered these metrics on the validation set:
 
 | Metric         | tas RMSE | tas MAE | tas Corr | pr RMSE | pr MAE | pr Corr |
 |----------------|----------|---------|----------|---------|--------|---------|
