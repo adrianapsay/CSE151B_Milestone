@@ -6,6 +6,8 @@ Below outlines an overview of the project, but if you want a more theoretical un
 
 If even more interested, feel free to take a look at our [slides here](https://github.com/adrianapsay/CSE151B_Milestone/blob/main/CSE%20151B%20-%20Presentation%20Slides%20(4).pdf).
 
+**NOTE**: The scripts and notebooks that were developed were removed from this repository, as per course policy.
+
 ## Project Structure
 
 - `notebooks/` – Jupyter notebooks for experimentation and exploratory analysis  
