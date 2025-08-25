@@ -2,6 +2,10 @@
 
 This repository contains the code and models developed for our final project in **CSE 151B: Deep Learning**, where we aim to emulate climate variables—specifically **temperature (tas)** and **precipitation (pr)**—using data-driven methods trained on CMIP6 climate model simulations.
 
+Below outlines an overview of the project, but if you want a more theoretical understanding of the project and our architectural choices, feel free to read the [final report here](https://github.com/adrianapsay/CSE151B_Milestone/blob/main/CSE_151B_Final_Report%20(9).pdf).
+
+If even more interested, feel free to take a look at our [slides here](https://github.com/adrianapsay/CSE151B_Milestone/blob/main/CSE%20151B%20-%20Presentation%20Slides%20(4).pdf).
+
 ## Project Structure
 
 - `notebooks/` – Jupyter notebooks for experimentation and exploratory analysis  
