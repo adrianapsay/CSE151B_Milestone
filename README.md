@@ -63,7 +63,7 @@ Our best-performing model on the **Kaggle private test set** garnered these metr
 ## Key Learnings
 
 - Simple architectures like CoordConv-based U-Nets generalize better than deeper, more complex variants.
-- Empirical testing is critical—common techniques (e.g., log-transform, SE/attention modules) often underperform without proper tuning.
+- Empirical testing is critical. Common techniques (e.g., log-transform, SE/attention modules) often underperform without proper tuning.
 - Shared decoder heads offered better gradient flow than dual-head decoders, especially under time constraints.
 
 ## Future Work
